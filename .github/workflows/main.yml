@@ -1,0 +1,23 @@
+name: Monitor Legal Diario
+on:
+  schedule:
+    - cron: '0 10 * * 1-5' # Se ejecuta a las 10:00 AM, de Lunes a Viernes
+  workflow_dispatch: # Esto permite que tú le des "clic" manualmente cuando quieras
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Instalar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar dependencias
+        run: pip install requests beautifulsoup4
+
+      - name: Ejecutar script
+        run: python monitor.py
