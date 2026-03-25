@@ -9,7 +9,6 @@ CHAT_ID = "1584135749"
 SHEET_ID = "1JNJtdPuX9UjLP0Y85SvtgLAahyg94ouok3hixL_8HCI"
 
 def obtener_expedientes_desde_google():
-    # Descarga la hoja como CSV (formato de texto plano)
     url_csv = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
     try:
         response = requests.get(url_csv)
@@ -18,8 +17,7 @@ def obtener_expedientes_desde_google():
         lector = csv.reader(lineas)
         # Saltamos la primera fila (encabezado) y limpiamos espacios
         return [fila[0].strip() for fila in lector if fila][1:]
-    except Exception as e:
-        print(f"Error leyendo Google Sheets: {e}")
+    except:
         return []
 
 def enviar_telegram(mensaje):
@@ -37,13 +35,23 @@ def revisar_estrados():
     BUSQUEDA = obtener_expedientes_desde_google()
     
     if not BUSQUEDA:
-        print("La lista de Google Sheets parece estar vacía o no es pública.")
+        print("La lista de Google Sheets está vacía o no es pública.")
         return
 
     url_estrados = "https://www.tsjqroo.gob.mx/estrados/"
+    
+    # --- CONFIGURACIÓN PARA EVITAR EL BLOQUEO (USER-AGENT) ---
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Referer': 'https://www.google.com/'
+    }
+
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        response = requests.get(url_estrados, headers=headers, timeout=25)
+        # Usamos una sesión para mantener las "cookies" y parecer más humanos
+        session = requests.Session()
+        response = session.get(url_estrados, headers=headers, timeout=30)
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -61,16 +69,15 @@ def revisar_estrados():
                     mensaje += f"📍 `{item}`\n"
                 mensaje += f"\n🔗 [Clic aquí para ver el boletín]({url_estrados})\n"
                 mensaje += "\n*¡Te deseo mucho éxito en todo lo que hagas hoy! Te quiero.* ❤️"
+                enviar_telegram(mensaje)
             else:
-                # Mensaje de confirmación de que el bot trabajó
-                mensaje = f"✅ *Revisión diaria ({fecha_hoy}):*\nNo hay novedades en tus casos de Quintana Roo hoy. ¡Que tengas un excelente día! ✨"
-            
-            enviar_telegram(mensaje)
+                # Si prefieres que NO le llegue nada si no hay cambios, comenta la línea de abajo
+                enviar_telegram(f"✅ *Revisión diaria ({fecha_hoy}):*\nNo hay novedades en tus casos hoy. ¡Que tengas un excelente día! ✨")
         else:
-            print(f"Error al acceder al portal: {response.status_code}")
+            print(f"El portal respondió con error: {response.status_code}")
 
     except Exception as e:
-        print(f"Error técnico: {e}")
+        print(f"Error de conexión: {e}")
 
 if __name__ == "__main__":
     revisar_estrados()
