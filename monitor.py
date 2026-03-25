@@ -15,69 +15,54 @@ def obtener_expedientes_desde_google():
         response.encoding = 'utf-8'
         lineas = response.text.splitlines()
         lector = csv.reader(lineas)
-        # Saltamos la primera fila (encabezado) y limpiamos espacios
         return [fila[0].strip() for fila in lector if fila][1:]
     except:
         return []
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID, 
-        "text": mensaje, 
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
-    requests.post(url, data=payload)
+    requests.post(url, data={"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"})
 
 def revisar_estrados():
-    # 1. Leer la lista del Excel de Google
     BUSQUEDA = obtener_expedientes_desde_google()
-    
     if not BUSQUEDA:
-        print("La lista de Google Sheets está vacía o no es pública.")
+        print("La lista de Google Sheets está vacía.")
         return
 
-    url_estrados = "https://www.tsjqroo.gob.mx/estrados/"
-    
-    # --- CONFIGURACIÓN PARA EVITAR EL BLOQUEO (USER-AGENT) ---
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
-        'Referer': 'https://www.google.com/'
-    }
+    # Usamos un servicio de 'CORS Proxy' para saltar el bloqueo regional
+    # Este servicio actúa como un túnel para entrar a páginas de gobierno
+    url_objetivo = "https://www.tsjqroo.gob.mx/estrados/"
+    proxy_url = f"https://api.allorigins.win/get?url={url_objetivo}"
 
     try:
-        # Usamos una sesión para mantener las "cookies" y parecer más humanos
-        session = requests.Session()
-        response = session.get(url_estrados, headers=headers, timeout=30)
+        print("Intentando conectar a través del túnel...")
+        response = requests.get(proxy_url, timeout=30)
         
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # El contenido viene dentro de un JSON llamado 'contents'
+            html_puro = response.json()['contents']
+            soup = BeautifulSoup(html_puro, 'html.parser')
             texto_web = soup.get_text().upper()
             
-            # 2. Buscar coincidencias
             encontrados = [item for item in BUSQUEDA if item.upper() in texto_web]
-            
             fecha_hoy = datetime.date.today().strftime("%d/%m/%Y")
             
             if encontrados:
-                mensaje = f"⚖️ *¡Hola amor! Revisé los estrados de hoy ({fecha_hoy}):*\n\n"
-                mensaje += "He encontrado novedades en estos expedientes:\n"
+                mensaje = f"⚖️ *¡Hola amor! Encontré novedades hoy ({fecha_hoy}):*\n\n"
                 for item in encontrados:
                     mensaje += f"📍 `{item}`\n"
-                mensaje += f"\n🔗 [Clic aquí para ver el boletín]({url_estrados})\n"
-                mensaje += "\n*¡Te deseo mucho éxito en todo lo que hagas hoy! Te quiero.* ❤️"
+                mensaje += f"\n🔗 [Ver Boletín]({url_objetivo})\n"
+                mensaje += "\n*¡Te quiero y te deseo un gran día!* ❤️"
                 enviar_telegram(mensaje)
             else:
-                # Si prefieres que NO le llegue nada si no hay cambios, comenta la línea de abajo
-                enviar_telegram(f"✅ *Revisión diaria ({fecha_hoy}):*\nNo hay novedades en tus casos hoy. ¡Que tengas un excelente día! ✨")
+                # Si quieres que siempre le llegue algo, descomenta la línea de abajo:
+                enviar_telegram(f"✅ *Revisión diaria ({fecha_hoy}):*\nNo hay novedades en tus casos hoy. ¡Mucho éxito! ✨")
+                print("No se encontraron coincidencias.")
         else:
-            print(f"El portal respondió con error: {response.status_code}")
+            print(f"El túnel falló con código: {response.status_code}")
 
     except Exception as e:
-        print(f"Error de conexión: {e}")
+        print(f"Error crítico de conexión: {e}")
 
 if __name__ == "__main__":
     revisar_estrados()
